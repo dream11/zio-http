@@ -1,7 +1,9 @@
 package zhttp.service
 
+import io.netty.buffer.ByteBufUtil
 import zhttp.core.JFullHttpRequest
 import zhttp.http._
+import zio.Chunk
 
 trait DecodeJRequest {
 
@@ -13,9 +15,6 @@ trait DecodeJRequest {
     method   = Method.fromJHttpMethod(jReq.method())
     headers  = Header.make(jReq.headers())
     endpoint = method -> url
-    data     = Request.Data(
-      headers,
-      HttpData.fromByteBuf(jReq.content()),
-    )
-  } yield Request(endpoint, data)
+    data     = Chunk.fromArray(ByteBufUtil.getBytes(jReq.content()))
+  } yield Request(endpoint, headers, HttpData.CompleteData(data))
 }

@@ -14,8 +14,17 @@ final case class ServerChannelInitializer(httpH: JChannelHandler, maxSize: Int) 
       .pipeline()
       .addLast(SERVER_CODEC_HANDLER, new JHttpServerCodec)
       .addLast(HTTP_KEEPALIVE_HANDLER, new HttpServerKeepAliveHandler)
-      .addLast(OBJECT_AGGREGATOR, new JHttpObjectAggregator(maxSize))
-      .addLast(HTTP_REQUEST_HANDLER, httpH)
+
+    httpH match {
+      case _: StreamingRequestHandler[_] =>
+        channel.pipeline().addLast(HTTP_REQUEST_HANDLER, httpH)
+      case _                             =>
+        channel
+          .pipeline()
+          .addLast(OBJECT_AGGREGATOR, new JHttpObjectAggregator(maxSize))
+          .addLast(HTTP_REQUEST_HANDLER, httpH)
+    }
+
     ()
   }
 }
