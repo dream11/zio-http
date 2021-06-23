@@ -11,9 +11,10 @@ object SimpleClient extends App {
     res <- Client.request(url, headers)
     _   <- console.putStrLn {
       res.content match {
-        case HttpData.CompleteData(data) => data.map(_.toChar).mkString
-        case HttpData.StreamData(_)      => "<Chunked>"
-        case HttpData.Empty              => ""
+        case HttpData.CompleteData(data)      => data.map(_.toChar).mkString
+        case HttpData.StreamData(_)           => "<Chunked>"
+        case HttpData.MultipartFormData(_, _) => "<Multipart-FormData>"
+        case HttpData.Empty                   => ""
       }
     }
   } yield ()
