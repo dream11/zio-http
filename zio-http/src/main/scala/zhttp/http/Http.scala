@@ -101,6 +101,11 @@ sealed trait Http[-R, +E, -A, +B] { self =>
   def map[C](bc: B => C): Http[R, E, A, C] = self.flatMap(b => Http.succeed(bc(b)))
 
   /**
+   * Transforms the failure of the http app
+   */
+  def mapError[E1](ee: E => E1): Http[R, E1, A, B] = self.foldM(e => Http.fail(ee(e)), Http.succeed, Http.empty)
+
+  /**
    * Transforms the input of the http before passing it on to the current Http
    */
   def contramap[X](xa: X => A): Http[R, E, X, B] = Http.identity[X].map(xa) >>> self
@@ -300,6 +305,13 @@ object Http {
    * Creates an Http that delegates to other Https.
    */
   def route[A]: Http.MakeRoute[A] = Http.MakeRoute(())
+
+  def sequence[R, E, A, B](list: List[Http[R, E, A, B]]): Http[R, E, A, List[B]] =
+    list match {
+      case Nil          => Http.empty
+      case head :: Nil  => head.map(List(_))
+      case head :: tail => head.flatMap(b => sequence(tail).map(l => b :: l))
+    }
 
   final class MkTotal[A](val unit: Unit) extends AnyVal {
     def apply[B](f: A => B): Http[Any, Nothing, A, B] = Http.identity[A].map(f)
