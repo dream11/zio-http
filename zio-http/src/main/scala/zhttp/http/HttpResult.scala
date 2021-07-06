@@ -40,6 +40,12 @@ sealed trait HttpResult[-R, +E, +A] { self =>
   ): HttpResult[R1, E1, B1] =
     HttpResult.foldM(self, ee, aa, dd)
 
+  def fold[E1, B1](ee: E => E1, aa: A => B1): HttpResult[R, E1, B1] =
+    self.foldM(e => HttpResult.fail(ee(e)), a => HttpResult.succeed(aa(a)), HttpResult.empty)
+
+  def mapError[E1](ee: E => E1): HttpResult[R, E1, A] =
+    self.fold(ee, identity(_))
+
   final private[zhttp] def evaluate: HttpResult.Out[R, E, A] = HttpResult.evaluate(self)
 }
 
