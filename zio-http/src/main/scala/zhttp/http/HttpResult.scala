@@ -15,6 +15,9 @@ sealed trait HttpResult[-R, +E, +A] { self =>
     self.flatMap(_ => other)
 
   def <>[R1 <: R, E1, A1 >: A](other: HttpResult[R1, E1, A1]): HttpResult[R1, E1, A1] =
+    self orElse other
+
+  def orElse[R1 <: R, E1, A1 >: A](other: HttpResult[R1, E1, A1]): HttpResult[R1, E1, A1] =
     self.flatMapError(_ => other)
 
   def flatMap[R1 <: R, E1 >: E, B](ab: A => HttpResult[R1, E1, B]): HttpResult[R1, E1, B] =
