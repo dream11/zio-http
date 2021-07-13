@@ -2,11 +2,16 @@ package zhttp.http
 
 import io.netty.buffer.Unpooled
 import io.netty.handler.codec.base64.Base64
-import io.netty.handler.codec.http.{HttpHeaderNames => JHttpHeaderNames, HttpHeaderValues => JHttpHeaderValues}
+import io.netty.handler.codec.http.{
+  HttpHeaderNames => JHttpHeaderNames,
+  HttpHeaderValues => JHttpHeaderValues,
+  HttpUtil => JHttpUtil,
+}
 import io.netty.util.AsciiString.toLowerCase
 import io.netty.util.{AsciiString, CharsetUtil}
 import zhttp.http.HeadersHelpers.{BasicSchemeName, BearerSchemeName}
 
+import java.nio.charset.Charset
 import scala.util.control.NonFatal
 
 private[zhttp] trait HeadersHelpers { self: HasHeaders =>
@@ -23,6 +28,16 @@ private[zhttp] trait HeadersHelpers { self: HasHeaders =>
       b.asInstanceOf[AsciiString].contentEqualsIgnoreCase(a)
     } else {
       (0 until a.length()).forall(i => equalsIgnoreCase(a.charAt(i), b.charAt(i)))
+    }
+  }
+
+  def getCharSet: Option[Charset] = {
+    val charSetList: List[Charset] = headers
+      .filter(_.value.toString.contains("charset="))
+      .map(x => JHttpUtil.getCharset(x.value, HTTP_CHARSET))
+    charSetList match {
+      case ::(head, _) => Some(head)
+      case Nil         => None
     }
   }
 
