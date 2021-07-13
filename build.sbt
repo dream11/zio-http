@@ -118,7 +118,10 @@ lazy val example = (project in file("./example"))
     fork := true,
     Compile / run / mainClass := Option("Authentication"),
     libraryDependencies ++= Seq(
-      "com.github.jwt-scala" %% "jwt-core" % "8.0.2",
+      "io.circe"             %% "circe-core"    % "0.14.1",
+      "io.circe"             %% "circe-generic" % "0.14.1",
+      "io.circe"             %% "circe-parser"  % "0.14.1",
+      "com.github.jwt-scala" %% "jwt-core"      % "8.0.2",
     ),
   )
   .dependsOn(zhttp)
