@@ -1,6 +1,6 @@
 package zhttp.http
 
-import zio.{CanFail, ZIO}
+import zio._
 
 import scala.annotation.unused
 
@@ -163,6 +163,40 @@ sealed trait Http[-R, +E, -A, +B] { self =>
   ): Http[R1, E1, A1, B1] = Http.FoldM(self, ee, bb, dd)
 
   /**
+   * Provides the `Http` with its required environment, which eliminates its dependency on `R`.
+   */
+  def provide(r: R)(implicit ev: NeedsEnv[R]): Http[Any, E, A, B] = Http.Provide(self, r)
+
+  /**
+   * Provides some of the environment required to run this `HttpResult`, leaving the remainder `R0`.
+   *
+   * If your environment has the type `Has[_]`, please see [[zhttp.http.HttpResult.provideSomeLayer]]
+   *
+   * {{{
+   * val res: HttpResult[Console with Logging, Nothing, Unit] = ???
+   *
+   * res.provideSome[Console](env =>
+   *   new Console with Logging {
+   *     val console = env.console
+   *     val logging = new Logging.Service[Any] {
+   *       def log(line: String) = console.putStrLn(line)
+   *     }
+   *   }
+   * )
+   * }}}
+   */
+  def provideSome[R0](f: R0 => R): Http[R0, E, A, B] =
+    Http.fromEffect(ZIO.access[R0](Predef.identity)).flatMap(e => { self.provide(f(e)) })
+
+  /**
+   * Provides a layer to the `Http`, which translates it to another level.
+   */
+  def provideLayer[E1 >: E, R0, R1 <: R](
+    layer: ZLayer[R0, E1, R1],
+  )(implicit ev1: R1 <:< R, ev2: NeedsEnv[R]): Http[R0, E1, A, B] =
+    Http.ProvideLayer(self, layer)
+
+  /**
    * Unwraps an Http that returns a ZIO of Http
    */
   def unwrap[R1 <: R, E1 >: E, C](implicit ev: B <:< ZIO[R1, E1, C]): Http[R1, E1, A, C] =
@@ -227,19 +261,21 @@ sealed trait Http[-R, +E, -A, +B] { self =>
   /**
    * Evaluates the app and returns an HttpResult that can be resolved further
    */
-  final private[zhttp] def execute(a: A): HttpResult[R, E, B] = {
+  final private[zhttp] def execute[R0, R1 <: R, E1 >: E](a: A): HttpResult[R, E, B] = {
     self match {
-      case Empty                   => HttpResult.empty
-      case Identity                => HttpResult.succeed(a.asInstanceOf[B])
-      case Succeed(b)              => HttpResult.succeed(b)
-      case Fail(e)                 => HttpResult.fail(e)
-      case FromEffectFunction(f)   => HttpResult.effect(f(a))
-      case Collect(pf)             => if (pf.isDefinedAt(a)) HttpResult.succeed(pf(a)) else HttpResult.empty
-      case Chain(self, other)      => HttpResult.suspend(self.execute(a) >>= (other.execute(_)))
-      case FoldM(self, ee, bb, dd) =>
+      case Empty                                => HttpResult.empty
+      case Identity                             => HttpResult.succeed(a.asInstanceOf[B])
+      case Succeed(b)                           => HttpResult.succeed(b)
+      case Fail(e)                              => HttpResult.fail(e)
+      case FromEffectFunction(f)                => HttpResult.effect(f(a))
+      case Collect(pf)                          => if (pf.isDefinedAt(a)) HttpResult.succeed(pf(a)) else HttpResult.empty
+      case Chain(self, other)                   => HttpResult.suspend(self.execute(a) >>= (other.execute(_)))
+      case FoldM(self, ee, bb, dd)              =>
         HttpResult.suspend {
           self.execute(a).foldM(ee(_).execute(a), bb(_).execute(a), dd.execute(a))
         }
+      case p: Provide[_, _, _, _]               => p.evaluate(a)
+      case p: ProvideLayer[_, _, _, _, _, _, _] => p.evaluate(a)
     }
   }
 }
@@ -259,6 +295,17 @@ object Http {
     bb: B => Http[R, EE, A, BB],
     dd: Http[R, EE, A, BB],
   )                                                                             extends Http[R, EE, A, BB]
+
+  private final case class Provide[R, E, A, B](self: Http[R, E, A, B], r: R) extends Http[Any, E, A, B] {
+    private[zhttp] def evaluate(a: A) = HttpResult.suspend(self.execute(a).provide(r))
+  }
+
+  private final case class ProvideLayer[E, E1 >: E, R, R0, R1 <: R, A, B](
+    self: Http[R, E, A, B],
+    layer: ZLayer[R0, E1, R1],
+  ) extends Http[R0, E1, A, B] {
+    private[zhttp] def evaluate(a: A) = HttpResult.suspend(self.execute(a).provideLayer(layer))
+  }
 
   // Ctor Help
   final case class MakeCollectM[A](unit: Unit) extends AnyVal {
